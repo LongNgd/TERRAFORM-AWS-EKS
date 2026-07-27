@@ -1,0 +1,9 @@
+aws_region                   = "ap-southeast-1"
+infrastructure_state_bucket  = "REPLACE_WITH_BOOTSTRAP_OUTPUT"
+infrastructure_state_key     = "longnd/dev/infrastructure.tfstate"
+deploy_sample_app            = false
+
+# Optional HTTPS. The ACM certificate must be in the same Region as the ALB.
+# certificate_arn = "arn:aws:acm:ap-southeast-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+load_balancer_controller_replica_count = 2
