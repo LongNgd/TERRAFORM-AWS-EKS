@@ -11,7 +11,7 @@ resource "aws_db_subnet_group" "main" {
 
 resource "aws_db_instance" "postgresql" {
   count = var.enable_rds ? 1 : 0
-  
+
   identifier = "${local.name}-postgresql"
 
   engine         = "postgres"
@@ -29,8 +29,8 @@ resource "aws_db_instance" "postgresql" {
 
   manage_master_user_password = true
 
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
+  db_subnet_group_name   = aws_db_subnet_group.main[0].name
+  vpc_security_group_ids = [aws_security_group.rds[0].id]
   publicly_accessible    = false
   multi_az               = true
 
