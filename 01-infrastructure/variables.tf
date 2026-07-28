@@ -172,3 +172,9 @@ variable "vpc_cidr" {
   description = "VPC CIDR block."
   default     = "10.20.0.0/16"
 }
+
+variable "enable_rds" {
+  type        = bool
+  description = "Create the PostgreSQL RDS resources."
+  default     = false
+}

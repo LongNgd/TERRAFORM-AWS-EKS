@@ -1,4 +1,6 @@
 resource "aws_db_subnet_group" "main" {
+  count = var.enable_rds ? 1 : 0
+
   name       = "${local.name}-db-subnets"
   subnet_ids = aws_subnet.private[*].id
 
@@ -8,6 +10,8 @@ resource "aws_db_subnet_group" "main" {
 }
 
 resource "aws_db_instance" "postgresql" {
+  count = var.enable_rds ? 1 : 0
+  
   identifier = "${local.name}-postgresql"
 
   engine         = "postgres"

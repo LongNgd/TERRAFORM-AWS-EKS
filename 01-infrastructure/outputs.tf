@@ -36,12 +36,12 @@ output "public_subnet_ids" {
 
 output "rds_endpoint" {
   description = "RDS PostgreSQL endpoint and port."
-  value       = aws_db_instance.postgresql.endpoint
+  value       = var.enable_rds ? aws_db_instance.postgresql[0].endpoint : null
 }
 
 output "rds_master_secret_arn" {
   description = "Secrets Manager ARN managed by RDS for the master credentials."
-  value       = try(aws_db_instance.postgresql.master_user_secret[0].secret_arn, null)
+  value       = var.enable_rds ? try(aws_db_instance.postgresql[0].master_user_secret[0].secret_arn, null) : null
 }
 
 output "vpc_id" {
