@@ -35,13 +35,13 @@ resource "aws_db_instance" "postgresql" {
   maintenance_window      = "sun:19:30-sun:20:30"
 
   auto_minor_version_upgrade = true
-  copy_tags_to_snapshot       = true
-  deletion_protection         = var.db_deletion_protection
-  skip_final_snapshot         = var.db_skip_final_snapshot
-  final_snapshot_identifier   = var.db_skip_final_snapshot ? null : "${local.name}-postgresql-final"
+  copy_tags_to_snapshot      = true
+  deletion_protection        = var.db_deletion_protection
+  skip_final_snapshot        = var.db_skip_final_snapshot
+  final_snapshot_identifier  = var.db_skip_final_snapshot ? null : "${local.name}-postgresql-final"
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
-  performance_insights_enabled     = true
+  performance_insights_enabled    = true
 
   apply_immediately = false
 }

@@ -13,5 +13,5 @@ variable "bucket_name" {
 variable "project_name" {
   type        = string
   description = "Project identifier used in resource names and tags."
-  default     = "longnd"
+  default     = "do2603-ndlong-project"
 }
