@@ -158,6 +158,18 @@ kubectl get ingress -n app
 terraform output sample_alb_hostname
 ```
 
+Sau khi có hostname, test sample app qua:
+
+```text
+http://<sample_alb_hostname>/test
+```
+
+Hoặc nếu đã cấu hình `certificate_arn`:
+
+```text
+https://<sample_alb_hostname>/test
+```
+
 ## 4. Triển khai PostgreSQL HA trên EKS
 
 ```bash

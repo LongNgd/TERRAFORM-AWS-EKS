@@ -137,7 +137,7 @@ resource "kubernetes_ingress_v1" "sample" {
     rule {
       http {
         path {
-          path      = "/"
+          path      = "/test"
           path_type = "Prefix"
 
           backend {

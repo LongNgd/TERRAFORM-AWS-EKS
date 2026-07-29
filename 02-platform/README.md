@@ -346,7 +346,7 @@ Các annotation chính:
 - `alb.ingress.kubernetes.io/target-type = "ip"`
   - target là pod IP
 - `alb.ingress.kubernetes.io/healthcheck-path = "/"`
-  - path health check
+  - path health check của pod backend
 - `alb.ingress.kubernetes.io/subnets`
   - chỉ rõ ALB dùng các public subnet từ output của `01`
 
@@ -425,7 +425,7 @@ resource "kubernetes_ingress_v1" "sample" {
 
 Ý nghĩa:
 - tạo ingress class `alb`
-- route path `/` vào service `sample-echo`
+- route path `/test` vào service `sample-echo`
 - `depends_on` đảm bảo controller đã được cài trước khi ingress xuất hiện
 
 Sau khi ingress này được tạo:
@@ -495,6 +495,18 @@ kubectl get deployment -n kube-system aws-load-balancer-controller
 kubectl get pods -n app -o wide
 kubectl get ingress -n app
 terraform output sample_alb_hostname
+```
+
+Sau khi ALB hostname xuất hiện, test sample app qua path:
+
+```text
+http://<sample_alb_hostname>/test
+```
+
+Hoặc nếu đã cấu hình `certificate_arn`:
+
+```text
+https://<sample_alb_hostname>/test
 ```
 
 ## 11. Phụ thuộc với stack khác
