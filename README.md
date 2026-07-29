@@ -8,7 +8,9 @@ Repository này dựng kiến trúc được mô tả trong sơ đồ, gồm:
 - 1 NAT Gateway cho mỗi Availability Zone
 - Amazon EKS control plane và managed node group chạy trên cả 2 private subnets
 - AWS Load Balancer Controller để tạo internet-facing ALB từ Kubernetes Ingress
-- Amazon RDS for PostgreSQL ở chế độ Multi-AZ
+- PostgreSQL theo một trong hai mô hình:
+  - Amazon RDS for PostgreSQL ở chế độ Multi-AZ
+  - hoặc PostgreSQL HA chạy trên EKS bằng Helm chart `bitnami/postgresql-ha`
 - private Amazon S3 bucket và S3 Gateway VPC Endpoint
 - EKS Pod Identity cho AWS Load Balancer Controller và application service account
 - Terraform remote state trên S3 với S3-native lock files
@@ -19,6 +21,7 @@ Repository này dựng kiến trúc được mô tả trong sơ đồ, gồm:
 00-bootstrap      Tạo S3 bucket chứa Terraform state.
 01-infrastructure Tạo network, EKS, RDS, S3, IAM và security resources trên AWS.
 02-platform       Cài AWS Load Balancer Controller và tùy chọn tạo workload mẫu với ALB.
+03-data-postgres  Triển khai PostgreSQL HA trên EKS bằng Helm, kèm backup S3 và monitoring toggle.
 ```
 
 Việc tách riêng stack `02-platform` giúp tránh lỗi bootstrap giữa provider `kubernetes` / `helm` và EKS API khi cluster còn chưa sẵn sàng.
@@ -28,6 +31,7 @@ Việc tách riêng stack `02-platform` giúp tránh lỗi bootstrap giữa prov
 - `00-bootstrap`: [00-bootstrap/README.md](00-bootstrap/README.md)
 - `01-infrastructure`: [01-infrastructure/README.md](01-infrastructure/README.md)
 - `02-platform`: [02-platform/README.md](02-platform/README.md)
+- `03-data-postgres`: [03-data-postgres/README.md](03-data-postgres/README.md)
 
 ## Luồng phụ thuộc
 
@@ -35,14 +39,18 @@ Việc tách riêng stack `02-platform` giúp tránh lỗi bootstrap giữa prov
 flowchart TD
     A[00-bootstrap\nCreate S3 state bucket] --> B[01-infrastructure\nCreate VPC, EKS, IAM, RDS, S3]
     A --> C[02-platform\nUse platform state backend]
+    A --> H[03-data-postgres\nUse data stack state backend]
     B --> C
+    B --> H
 
     B --> D[Terraform Outputs\ncluster_name\nvpc_id\npublic_subnet_ids]
     D --> C
+    D --> H
 
     C --> E[AWS Load Balancer Controller]
     C --> F[Sample App and Ingress]
     F --> G[Internet-facing ALB]
+    H --> I[PostgreSQL HA on EKS]
 ```
 
 ## Luồng runtime
@@ -53,7 +61,7 @@ flowchart LR
     ALB --> ING[Kubernetes Ingress]
     ING --> SVC[Service]
     SVC --> POD[EKS Pods in private subnets]
-    POD --> RDS[RDS PostgreSQL]
+    POD --> DB[(PostgreSQL)]
     POD --> S3[S3 via Gateway Endpoint]
     POD --> NAT[NAT Gateway]
     NAT --> NET[Internet]
@@ -150,6 +158,31 @@ kubectl get ingress -n app
 terraform output sample_alb_hostname
 ```
 
+## 4. Triển khai PostgreSQL HA trên EKS
+
+```bash
+cd ../03-data-postgres
+cp backend.hcl.example backend.hcl
+cp terraform.tfvars.example terraform.tfvars
+terraform init -backend-config=backend.hcl
+terraform fmt -check
+terraform validate
+terraform plan -out data-postgres.tfplan
+terraform apply data-postgres.tfplan
+```
+
+Điền các password PostgreSQL/Pgpool qua `terraform.tfvars`, `TF_VAR_*` hoặc secret manager trước khi apply.
+
+Kiểm tra:
+
+```bash
+kubectl get pods -n data -o wide
+kubectl get pvc -n data
+kubectl get svc -n data
+kubectl get cronjob -n data
+terraform output pgpool_service_fqdn
+```
+
 ## Luồng traffic
 
 ```text
@@ -158,11 +191,14 @@ Internet
   -> ALB in both public subnets
   -> Kubernetes Ingress / Service
   -> EKS Pods in private subnets
-  -> RDS PostgreSQL endpoint on TCP 5432
+  -> PostgreSQL endpoint on TCP 5432
 
 EKS Pods
   -> S3 Gateway VPC Endpoint
   -> private S3 bucket
+
+Backup CronJob in EKS
+  -> S3 bucket for PostgreSQL logical backups
 
 EKS nodes and pods requiring internet egress
   -> NAT Gateway in the same Availability Zone
@@ -177,16 +213,20 @@ EKS nodes and pods requiring internet egress
 - Thay listener HTTP mẫu bằng HTTPS dùng ACM bằng cách set `certificate_arn`.
 - Chạy Terraform từ CI role được kiểm soát và giới hạn EKS public endpoint chỉ cho runner đó, hoặc tắt public endpoint và chạy từ bên trong VPC.
 - Tách private subnet cho application và database nếu baseline bảo mật yêu cầu DB tier riêng.
+- Nếu dùng `03-data-postgres`, bật backup S3, kiểm tra restore định kỳ và cân nhắc node group riêng cho database workload.
 - Bổ sung Route 53, AWS WAF, CloudWatch alarms, GuardDuty, CloudTrail, VPC Flow Logs, AWS Backup và tích hợp application secrets.
 - Rà lại IAM policy của Load Balancer Controller và giới hạn theo VPC hoặc cluster tags khi phù hợp.
-- Rà lại chi phí hàng tháng trước khi apply. Hai NAT Gateways, EKS, từ hai EC2 node trở lên và Multi-AZ RDS đều phát sinh chi phí liên tục.
+- Rà lại chi phí hàng tháng trước khi apply. Hai NAT Gateways, EKS, từ hai EC2 node trở lên và PostgreSQL HA với nhiều PVC/replica đều phát sinh chi phí liên tục.
 
 ## Thứ tự destroy
 
-Destroy `02-platform` trước để controller kịp xóa ALB và target groups:
+Destroy `03-data-postgres` trước nếu đã triển khai PostgreSQL trên EKS. Sau đó destroy `02-platform` để controller kịp xóa ALB và target groups:
 
 ```bash
-cd 02-platform
+cd 03-data-postgres
+terraform destroy
+
+cd ../02-platform
 terraform destroy
 
 cd ../01-infrastructure

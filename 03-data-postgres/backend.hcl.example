@@ -1,0 +1,5 @@
+bucket       = "REPLACE_WITH_BOOTSTRAP_OUTPUT"
+key          = "longnd/dev/data-postgres.tfstate"
+region       = "ap-southeast-1"
+encrypt      = true
+use_lockfile = true

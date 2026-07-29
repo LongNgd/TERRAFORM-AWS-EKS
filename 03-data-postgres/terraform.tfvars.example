@@ -1,0 +1,27 @@
+aws_region                  = "ap-southeast-1"
+infrastructure_state_bucket = "REPLACE_WITH_BOOTSTRAP_OUTPUT"
+infrastructure_state_key    = "longnd/dev/infrastructure.tfstate"
+
+postgres_namespace    = "data"
+postgres_release_name = "postgresql-ha"
+
+postgresql_replica_count = 3
+postgresql_storage_class = "gp3"
+postgresql_storage_size  = "20Gi"
+postgresql_database      = "appdb"
+postgresql_username      = "appuser"
+
+# Set these through TF_VAR_* or your secret manager in real environments.
+postgresql_password         = "REPLACE_ME"
+postgresql_postgres_password = "REPLACE_ME"
+postgresql_repmgr_password  = "REPLACE_ME"
+pgpool_admin_password       = "REPLACE_ME"
+pgpool_sr_check_password    = "REPLACE_ME"
+
+enable_metrics         = true
+enable_service_monitor = false
+
+enable_s3_backup    = true
+create_backup_bucket = true
+backup_s3_prefix    = "postgresql-ha"
+backup_schedule     = "0 2 * * *"

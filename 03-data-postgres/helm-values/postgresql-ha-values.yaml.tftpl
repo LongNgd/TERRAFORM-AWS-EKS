@@ -1,0 +1,60 @@
+fullnameOverride: "${fullname_override}"
+
+postgresql:
+  username: "${postgresql_username}"
+  database: "${postgresql_database}"
+  existingSecret: "${postgresql_secret_name}"
+  repmgrUsername: repmgr
+  syncReplication: ${postgresql_sync_replication}
+  replicaCount: ${postgresql_replica_count}
+  podAntiAffinityPreset: hard
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: postgresql
+          app.kubernetes.io/instance: ${fullname_override}
+  resources:
+    requests:
+      cpu: "${postgresql_requests_cpu}"
+      memory: "${postgresql_requests_memory}"
+    limits:
+      cpu: "${postgresql_limits_cpu}"
+      memory: "${postgresql_limits_memory}"
+  persistence:
+    enabled: true
+    storageClass: "${postgresql_storage_class}"
+    size: "${postgresql_storage_size}"
+
+pgpool:
+  existingSecret: "${pgpool_secret_name}"
+  adminUsername: "${pgpool_admin_username}"
+  srCheckUsername: "${pgpool_sr_check_username}"
+  replicaCount: ${pgpool_replica_count}
+  podAntiAffinityPreset: hard
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: pgpool
+          app.kubernetes.io/instance: ${fullname_override}
+  resources:
+    requests:
+      cpu: "${pgpool_requests_cpu}"
+      memory: "${pgpool_requests_memory}"
+    limits:
+      cpu: "${pgpool_limits_cpu}"
+      memory: "${pgpool_limits_memory}"
+
+service:
+  type: "${pgpool_service_type}"
+
+metrics:
+  enabled: ${enable_metrics}
+  serviceMonitor:
+    enabled: ${enable_service_monitor}
+    namespace: "${service_monitor_namespace}"

@@ -1,0 +1,231 @@
+# 03-data-postgres
+
+`03-data-postgres` là stack triển khai PostgreSQL HA trên EKS bằng Helm chart `bitnami/postgresql-ha`.
+
+Stack này tách riêng data layer khỏi `02-platform` để tránh trộn cluster add-on với workload stateful.
+
+## 1. Mục đích của stack
+
+Stack này làm 2 phase:
+
+- Phase 1: dựng PostgreSQL HA trên EKS bằng Helm
+- Phase 2: bổ sung backup logical ra S3, metrics và ServiceMonitor tùy chọn
+
+## 2. Phạm vi của stack
+
+Stack này chịu trách nhiệm cho:
+- namespace PostgreSQL
+- PostgreSQL HA release bằng Helm
+- Kubernetes secrets cho DB và Pgpool
+- backup CronJob ra S3
+- backup IAM role và Pod Identity association
+- monitoring toggle cho metrics / ServiceMonitor
+
+Stack này không tạo:
+- VPC
+- EKS cluster
+- node group
+- ALB ingress controller
+- workload ứng dụng business
+
+## 3. Input và output
+
+### Input chính
+
+| Biến | Bắt buộc | Ý nghĩa ngắn |
+| --- | --- | --- |
+| `infrastructure_state_bucket` | Có | Bucket chứa state của `01-infrastructure` |
+| `infrastructure_state_key` | Không | Key chứa state của `01-infrastructure` |
+| `postgres_namespace` | Không | Namespace đặt PostgreSQL |
+| `postgres_release_name` | Không | Tên Helm release |
+| `postgres_chart_version` | Không | Version chart `bitnami/postgresql-ha` |
+| `postgresql_replica_count` | Không | Số PostgreSQL replicas, tối thiểu 3 và số lẻ |
+| `postgresql_storage_class` | Không | StorageClass cho PVC |
+| `postgresql_storage_size` | Không | Dung lượng PVC mỗi replica |
+| `postgresql_username` | Không | User ứng dụng |
+| `postgresql_password` | Có | Password của user ứng dụng |
+| `postgresql_postgres_password` | Có | Password của superuser `postgres` |
+| `postgresql_repmgr_password` | Có | Password cho `repmgr` |
+| `pgpool_admin_password` | Có | Password admin của Pgpool |
+| `pgpool_sr_check_password` | Có | Password sr-check của Pgpool |
+| `enable_metrics` | Không | Bật postgres exporter metrics |
+| `enable_service_monitor` | Không | Tạo ServiceMonitor nếu cluster có Prometheus Operator |
+| `enable_s3_backup` | Không | Bật CronJob backup logical ra S3 |
+| `create_backup_bucket` | Không | Tự tạo bucket backup riêng |
+| `backup_s3_bucket_name` | Không | Bucket backup có sẵn nếu không tự tạo |
+| `backup_schedule` | Không | Cron schedule của backup job |
+
+### Output chính
+
+| Output | Ý nghĩa ngắn |
+| --- | --- |
+| `postgres_namespace` | Namespace chứa PostgreSQL |
+| `postgres_release_name` | Helm release name |
+| `pgpool_service_name` | Service name để app kết nối DB |
+| `pgpool_service_fqdn` | DNS nội bộ của Pgpool |
+| `backup_bucket_name` | Bucket backup đang dùng nếu bật backup |
+| `backup_cronjob_name` | CronJob backup nếu bật backup |
+
+## 4. Luồng chạy tổng thể
+
+1. Đọc remote state của `01-infrastructure`.
+2. Kết nối vào EKS bằng provider `kubernetes` và `helm`.
+3. Tạo namespace và secrets cho PostgreSQL/Pgpool.
+4. Cài Helm chart `bitnami/postgresql-ha`.
+5. Nếu bật phase 2, tạo S3 backup bucket tùy chọn, IAM role, Pod Identity và CronJob backup.
+6. Nếu bật metrics, chart sẽ bật exporter và có thể tạo ServiceMonitor.
+
+## 5. Phase 1: PostgreSQL HA bằng Helm
+
+Helm chart dùng:
+- repository: `https://charts.bitnami.com/bitnami`
+- chart: `postgresql-ha`
+
+Các mặc định production-minded đang được set:
+- `postgresql.replicaCount = 3`
+- `postgresql.podAntiAffinityPreset = hard`
+- `pgpool.replicaCount = 2`
+- `pgpool.podAntiAffinityPreset = hard`
+- `persistence.enabled = true`
+- `service.type = ClusterIP`
+
+App trong cluster nên kết nối qua:
+
+```text
+<release-name>-pgpool.<namespace>.svc.cluster.local:5432
+```
+
+Ví dụ với mặc định hiện tại:
+
+```text
+postgresql-ha-pgpool.data.svc.cluster.local:5432
+```
+
+## 6. Phase 2: Backup và monitoring
+
+### Backup ra S3
+
+Khi `enable_s3_backup = true`, stack sẽ tạo:
+- service account riêng cho backup
+- IAM role với quyền ghi S3
+- Pod Identity association
+- CronJob chạy `pg_dumpall | gzip` rồi upload lên S3
+
+Lưu ý:
+- đây là logical backup, không phải PITR
+- backup image và upload image đang để public image mặc định; production lâu dài nên thay bằng image nội bộ của team
+
+### Monitoring
+
+Khi `enable_metrics = true`, chart sẽ bật exporter metrics.
+
+Khi thêm `enable_service_monitor = true`, chart sẽ tạo `ServiceMonitor`.
+
+Lưu ý:
+- cluster phải có Prometheus Operator CRDs, nếu không Helm release sẽ fail
+
+## 7. Luồng apply thực tế
+
+### Bước 1. Chuẩn bị backend
+
+Tạo `backend.hcl` từ file mẫu:
+
+```hcl
+bucket       = "REPLACE_WITH_BOOTSTRAP_OUTPUT"
+key          = "longnd/dev/data-postgres.tfstate"
+region       = "ap-southeast-1"
+encrypt      = true
+use_lockfile = true
+```
+
+### Bước 2. Chuẩn bị `terraform.tfvars`
+
+Từ `terraform.tfvars.example`, điền các password thật bằng `TF_VAR_*` hoặc secret manager.
+
+### Bước 3. Chạy Terraform
+
+```bash
+terraform init -backend-config=backend.hcl
+terraform fmt -check
+terraform validate
+terraform plan -out data-postgres.tfplan
+terraform apply data-postgres.tfplan
+```
+
+## 8. Kiểm tra sau khi apply
+
+### Kubernetes
+
+```bash
+kubectl get pods -n data -o wide
+kubectl get pvc -n data
+kubectl get svc -n data
+kubectl get cronjob -n data
+```
+
+### AWS
+
+- kiểm tra Pod Identity association cho backup nếu bật
+- kiểm tra bucket backup nếu `create_backup_bucket = true`
+
+## 9. Restore test khuyến nghị
+
+Stack này chưa tự động tạo restore job vì restore test production nên làm có chủ đích.
+
+Khuyến nghị tối thiểu:
+1. Tạo namespace test riêng, ví dụ `restore-test`.
+2. Deploy một PostgreSQL tạm thời hoặc một DB rỗng để test.
+3. Tải một file backup mới nhất từ S3.
+4. Chạy `gunzip -c backup.sql.gz | psql ...` để import vào DB test.
+5. Kiểm tra bảng, schema và quyền truy cập sau restore.
+
+## 10. Troubleshooting
+
+### Helm release fail với `ServiceMonitor`
+
+Nguyên nhân thường gặp:
+- cluster chưa có Prometheus Operator CRDs
+
+Cách xử lý:
+- tắt `enable_service_monitor`
+- hoặc cài Prometheus Operator trước
+
+### Backup CronJob fail khi upload S3
+
+Nguyên nhân thường gặp:
+- bucket name chưa đúng
+- Pod Identity chưa tạo xong
+- IAM role backup thiếu quyền S3
+
+Cách xử lý:
+- kiểm tra `backup_bucket_name`
+- kiểm tra Pod Identity association trong EKS Access
+- kiểm tra logs của job backup
+
+### Pod PostgreSQL không lên do PVC
+
+Nguyên nhân thường gặp:
+- storage class không tồn tại
+- thiếu disk quota
+
+Cách xử lý:
+- kiểm tra `postgresql_storage_class`
+- kiểm tra `kubectl describe pvc -n <namespace>`
+
+## 11. Production checklist
+
+- dùng ít nhất `postgresql_replica_count = 3`
+- dùng explicit resources, không dựa vào `resourcesPreset`
+- backup S3 phải bật và được kiểm tra định kỳ
+- restore test phải được chạy định kỳ ngoài production path
+- ServiceMonitor chỉ bật khi cluster có Prometheus Operator
+- cân nhắc dùng image nội bộ thay cho image public của backup job
+- cân nhắc node group riêng cho database nếu workload lớn
+
+## 12. Tóm tắt dễ nhớ
+
+`03-data-postgres` là stack data layer cho PostgreSQL HA trên EKS.
+
+Nó làm 2 phase chính:
+1. dựng PostgreSQL HA bằng Helm chart `bitnami/postgresql-ha`
+2. bổ sung backup logical ra S3 và monitoring toggle cho production cơ bản
