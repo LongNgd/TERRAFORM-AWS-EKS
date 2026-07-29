@@ -12,7 +12,7 @@ Repository này dựng kiến trúc được mô tả trong sơ đồ, gồm:
   - Amazon RDS for PostgreSQL ở chế độ Multi-AZ
   - hoặc PostgreSQL HA chạy trên EKS bằng Helm chart `bitnami/postgresql-ha`
 - private Amazon S3 bucket và S3 Gateway VPC Endpoint
-- EKS Pod Identity cho AWS Load Balancer Controller và application service account
+- IAM access cho AWS Load Balancer Controller qua IRSA và cho application service account qua EKS Pod Identity
 - Terraform remote state trên S3 với S3-native lock files
 
 ## Tách stack

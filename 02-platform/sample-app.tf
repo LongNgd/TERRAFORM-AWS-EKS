@@ -1,14 +1,14 @@
 locals {
   sample_ingress_annotations = merge(
     {
-      "alb.ingress.kubernetes.io/scheme"          = "internet-facing"
-      "alb.ingress.kubernetes.io/target-type"     = "ip"
+      "alb.ingress.kubernetes.io/scheme"           = "internet-facing"
+      "alb.ingress.kubernetes.io/target-type"      = "ip"
       "alb.ingress.kubernetes.io/healthcheck-path" = "/"
-      "alb.ingress.kubernetes.io/subnets"         = join(",", data.terraform_remote_state.infrastructure.outputs.public_subnet_ids)
+      "alb.ingress.kubernetes.io/subnets"          = join(",", data.terraform_remote_state.infrastructure.outputs.public_subnet_ids)
     },
     var.certificate_arn == "" ? {
       "alb.ingress.kubernetes.io/listen-ports" = "[{\"HTTP\":80}]"
-    } : {
+      } : {
       "alb.ingress.kubernetes.io/listen-ports"    = "[{\"HTTP\":80},{\"HTTPS\":443}]"
       "alb.ingress.kubernetes.io/certificate-arn" = var.certificate_arn
       "alb.ingress.kubernetes.io/ssl-redirect"    = "443"

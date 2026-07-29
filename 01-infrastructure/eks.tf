@@ -106,15 +106,6 @@ resource "aws_eks_addon" "main" {
   depends_on = [aws_eks_node_group.general]
 }
 
-resource "aws_eks_pod_identity_association" "load_balancer_controller" {
-  cluster_name    = aws_eks_cluster.main.name
-  namespace       = "kube-system"
-  service_account = "aws-load-balancer-controller"
-  role_arn        = aws_iam_role.load_balancer_controller.arn
-
-  depends_on = [aws_eks_addon.main["eks-pod-identity-agent"]]
-}
-
 resource "aws_eks_pod_identity_association" "application" {
   cluster_name    = aws_eks_cluster.main.name
   namespace       = "app"

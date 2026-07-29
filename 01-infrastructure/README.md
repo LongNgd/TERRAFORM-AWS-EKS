@@ -22,7 +22,8 @@ Stack này chịu trách nhiệm tạo các thành phần nền tảng:
 - EKS managed node group
 - EKS add-ons
 - IAM roles và policies
-- EKS Pod Identity associations
+- EKS Pod Identity association cho application pod
+- IAM OIDC provider và IRSA role cho AWS Load Balancer Controller
 - RDS PostgreSQL Multi-AZ
 - private S3 bucket cho ứng dụng
 - security group cho RDS
@@ -104,7 +105,7 @@ Luồng logic:
 8. Terraform tạo EKS cluster.
 9. Terraform tạo managed node group.
 10. Terraform cài EKS add-ons mặc định.
-11. Terraform tạo Pod Identity associations.
+11. Terraform tạo Pod Identity association cho application pod và IRSA/OIDC resources cho AWS Load Balancer Controller.
 12. Terraform tạo RDS subnet group, security group và PostgreSQL instance.
 13. Terraform tạo S3 bucket riêng cho ứng dụng.
 14. Terraform xuất output để `02-platform` đọc lại qua remote state.
@@ -409,17 +410,17 @@ resource "aws_eks_addon" "main" {
 - cài các add-on thiết yếu cho EKS
 - `most_recent = true` để lấy bản mới nhất tương thích ở thời điểm apply
 
-### 6.6. Pod Identity associations
+### 6.6. Pod Identity và IRSA
 
-Có 2 association:
-- `aws_eks_pod_identity_association.load_balancer_controller`
-- `aws_eks_pod_identity_association.application`
+Stack này đang dùng 2 cơ chế IAM cho workload trong cluster:
+- IRSA cho `aws-load-balancer-controller`
+- EKS Pod Identity cho `app-sa`
 
 Ý nghĩa:
-- service account `aws-load-balancer-controller` trong namespace `kube-system` được assume role tương ứng
-- service account `app-sa` trong namespace `app` được assume role ứng dụng
+- service account `aws-load-balancer-controller` trong namespace `kube-system` nhận IAM role qua OIDC/IRSA
+- service account `app-sa` trong namespace `app` được map IAM role qua Pod Identity
 
-Đây là cách map IAM role cho pod theo cơ chế EKS Pod Identity.
+Điều này cho phép controller dùng AWS API để tạo ALB mà không cần access key tĩnh, còn application pod vẫn dùng Pod Identity như cũ.
 
 ### 6.7. Access entries cho admin roles
 
@@ -665,7 +666,7 @@ Phụ thuộc vào `00-bootstrap`:
 - RDS Multi-AZ
 - password RDS do Secrets Manager quản
 - app bucket private và có deny insecure transport
-- dùng Pod Identity thay vì hardcode AWS credentials trong pod
+- dùng IRSA hoặc Pod Identity thay vì hardcode AWS credentials trong pod
 
 ## 16. Production checklist
 

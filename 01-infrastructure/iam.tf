@@ -67,6 +67,42 @@ data "aws_iam_policy_document" "pod_identity_assume_role" {
   }
 }
 
+data "tls_certificate" "eks_oidc" {
+  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
+
+  client_id_list = ["sts.amazonaws.com"]
+
+  thumbprint_list = [data.tls_certificate.eks_oidc.certificates[length(data.tls_certificate.eks_oidc.certificates) - 1].sha1_fingerprint]
+}
+
+data "aws_iam_policy_document" "load_balancer_controller_irsa_assume_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.eks_oidc_issuer_hostpath}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.eks_oidc_issuer_hostpath}:sub"
+      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
+    }
+  }
+}
+
 resource "aws_iam_policy" "load_balancer_controller" {
   name        = "${local.name}-aws-load-balancer-controller"
   description = "Permissions for AWS Load Balancer Controller v3.4.2."
@@ -75,7 +111,7 @@ resource "aws_iam_policy" "load_balancer_controller" {
 
 resource "aws_iam_role" "load_balancer_controller" {
   name               = "${local.name}-aws-load-balancer-controller"
-  assume_role_policy = data.aws_iam_policy_document.pod_identity_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.load_balancer_controller_irsa_assume_role.json
 }
 
 resource "aws_iam_role_policy_attachment" "load_balancer_controller" {

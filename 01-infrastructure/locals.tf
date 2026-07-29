@@ -13,6 +13,7 @@ locals {
     var.additional_tags
   )
 
-  cluster_name    = "${local.name}-eks"
-  app_bucket_name = var.app_bucket_name != "" ? var.app_bucket_name : "${local.name}-app-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
+  cluster_name           = "${local.name}-eks"
+  app_bucket_name        = var.app_bucket_name != "" ? var.app_bucket_name : "${local.name}-app-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
+  eks_oidc_issuer_hostpath = trimprefix(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://")
 }

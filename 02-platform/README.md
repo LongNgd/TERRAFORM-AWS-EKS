@@ -320,11 +320,11 @@ serviceAccount:
 - `replicaCount`
   - số replica của controller
 - `serviceAccount.name`
-  - phải trùng với Pod Identity association được tạo ở `01-infrastructure`
+  - phải trùng với IAM role trust đang cho phép `system:serviceaccount:kube-system:aws-load-balancer-controller`
 
 Điểm quan trọng:
-- service account tên `aws-load-balancer-controller` phải khớp với association trong `01-infrastructure/eks.tf`
-- nếu lệch tên, pod sẽ không assume đúng IAM role
+- service account tên `aws-load-balancer-controller` phải khớp với IRSA trust policy trong `01-infrastructure`
+- nếu lệch tên, pod sẽ không assume đúng IAM role controller
 
 ## 8. Giải thích `sample-app.tf`
 
@@ -518,7 +518,7 @@ Phụ thuộc vào `01-infrastructure`:
 - cần remote state của `01` có sẵn
 - cần EKS cluster đã tạo xong
 - cần node group hoạt động để pods có chỗ chạy
-- cần Pod Identity association và IAM role đã sẵn sàng
+- cần IAM role và IRSA annotation của controller đã sẵn sàng
 
 ## 12. Điểm tốt của stack này
 
@@ -535,7 +535,7 @@ Trước khi dùng stack này cho production, nên kiểm tra các mục sau:
 - `infrastructure_state_bucket` và `infrastructure_state_key` đang trỏ đúng state của môi trường tương ứng
 - `load_balancer_controller_chart_version` đã được review tương thích với EKS version hiện tại
 - `load_balancer_controller_replica_count >= 2` cho môi trường HA
-- service account trong Helm values vẫn khớp với Pod Identity association của `01-infrastructure`
+- service account trong Helm values vẫn khớp với IRSA trust policy của `01-infrastructure`
 - `deploy_sample_app = false` trước khi go-live
 - nếu còn cần ingress public thì đã cấu hình `certificate_arn` để bật HTTPS và redirect từ HTTP sang HTTPS
 - cân nhắc nâng `client.authentication.k8s.io/v1beta1` lên `v1` cho provider `kubernetes` và `helm`
@@ -577,13 +577,13 @@ Cách xử lý:
 
 Nguyên nhân thường gặp:
 - node group chưa sẵn sàng
-- Pod Identity chưa map đúng service account
+- IRSA annotation hoặc trust policy chưa khớp service account
 - IAM policy của controller thiếu quyền
 
 Cách xử lý:
 - kiểm tra pods trong namespace `kube-system`
 - xác nhận service account tên `aws-load-balancer-controller`
-- kiểm tra role và Pod Identity association đã tồn tại từ stack `01-infrastructure`
+- kiểm tra role IRSA, OIDC provider và service account annotation đã được tạo từ stack `01-infrastructure`
 
 ### Lỗi ingress tạo rồi nhưng không sinh ALB
 

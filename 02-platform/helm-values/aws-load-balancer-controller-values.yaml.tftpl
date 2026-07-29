@@ -1,5 +1,5 @@
 # Helm values for aws-load-balancer-controller.
-# Rendered by Terraform with templatefile(); do not replace the ${...} placeholders here.
+# Rendered by Terraform with templatefile(); do not replace the interpolation placeholders here.
 
 clusterName: ${cluster_name}
 region: ${aws_region}
@@ -9,3 +9,5 @@ replicaCount: ${replica_count}
 serviceAccount:
   create: true
   name: aws-load-balancer-controller
+  annotations:
+    eks.amazonaws.com/role-arn: "${load_balancer_controller_role_arn}"

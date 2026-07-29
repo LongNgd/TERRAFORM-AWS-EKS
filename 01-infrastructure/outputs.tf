@@ -24,6 +24,11 @@ output "cluster_name" {
   value       = aws_eks_cluster.main.name
 }
 
+output "load_balancer_controller_role_arn" {
+  description = "IAM role ARN used by AWS Load Balancer Controller via IRSA."
+  value       = aws_iam_role.load_balancer_controller.arn
+}
+
 output "private_subnet_ids" {
   description = "Private subnet IDs used by EKS and RDS."
   value       = aws_subnet.private[*].id

@@ -14,10 +14,11 @@ resource "helm_release" "aws_load_balancer_controller" {
     templatefile(
       "${path.module}/helm-values/aws-load-balancer-controller-values.yaml.tftpl",
       {
-        cluster_name  = data.terraform_remote_state.infrastructure.outputs.cluster_name
-        aws_region    = var.aws_region
-        vpc_id        = data.terraform_remote_state.infrastructure.outputs.vpc_id
-        replica_count = var.load_balancer_controller_replica_count
+        cluster_name                      = data.terraform_remote_state.infrastructure.outputs.cluster_name
+        aws_region                        = var.aws_region
+        vpc_id                            = data.terraform_remote_state.infrastructure.outputs.vpc_id
+        replica_count                     = var.load_balancer_controller_replica_count
+        load_balancer_controller_role_arn = data.terraform_remote_state.infrastructure.outputs.load_balancer_controller_role_arn
       }
     )
   ]
