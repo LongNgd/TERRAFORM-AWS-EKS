@@ -75,7 +75,167 @@ Stack này không tạo:
 5. Nếu bật phase 2, tạo S3 backup bucket tùy chọn, IAM role, Pod Identity và CronJob backup.
 6. Nếu bật metrics, chart sẽ bật exporter và có thể tạo ServiceMonitor.
 
-## 5. Phase 1: PostgreSQL HA bằng Helm
+## 5. Giải thích từng file
+
+### `versions.tf`
+
+```hcl
+terraform {
+  required_version = ">= 1.15.0, < 1.16.0"
+
+  backend "s3" {}
+
+  required_providers {
+    aws        = ...
+    helm       = ...
+    kubernetes = ...
+  }
+}
+```
+
+Ý nghĩa:
+- khóa version Terraform CLI
+- dùng remote backend S3 riêng cho stack `03-data-postgres`
+- pin provider AWS, Helm và Kubernetes
+
+### `providers.tf`
+
+File này làm 3 việc:
+- cấu hình AWS provider theo `aws_region`
+- đọc remote state của `01-infrastructure`
+- cấu hình provider `kubernetes` và `helm` để kết nối vào EKS cluster đã có
+
+Điểm quan trọng:
+- stack này không tự tạo lại cluster
+- nó lấy `cluster_name` từ state của `01`
+- sau đó gọi `data.aws_eks_cluster.main` để lấy endpoint và certificate authority
+- auth vào cluster bằng `aws eks get-token`
+
+### `variables.tf`
+
+File này chứa toàn bộ biến cấu hình cho 2 phase.
+
+Nhóm biến chính:
+- biến kết nối hạ tầng: `infrastructure_state_bucket`, `infrastructure_state_key`
+- biến Helm/PostgreSQL: `postgres_release_name`, `postgres_chart_version`, `postgresql_*`, `pgpool_*`
+- biến monitoring: `enable_metrics`, `enable_service_monitor`
+- biến backup: `enable_s3_backup`, `create_backup_bucket`, `backup_*`
+
+### `locals.tf`
+
+File này tạo các giá trị dùng lại nhiều lần:
+- tên secret cho PostgreSQL
+- tên secret cho Pgpool
+- tên service account backup
+- tên bucket backup cuối cùng
+- FQDN nội bộ của Pgpool service
+
+Ví dụ:
+- `local.pgpool_service_name`
+- `local.pgpool_service_fqdn`
+
+Giá trị này rất quan trọng vì app trong cluster sẽ kết nối qua Pgpool chứ không gọi thẳng từng pod PostgreSQL.
+
+### `main.tf`
+
+Đây là file triển khai phase 1.
+
+Nó tạo:
+- namespace `data` hoặc namespace bạn cấu hình
+- secret cho PostgreSQL passwords
+- secret cho Pgpool passwords
+- Helm release `bitnami/postgresql-ha`
+
+Ý nghĩa các resource chính:
+
+#### `kubernetes_namespace_v1.postgres`
+- tạo namespace riêng cho data layer
+
+#### `kubernetes_secret_v1.postgresql_auth`
+- chứa:
+  - password của app user
+  - password của `postgres`
+  - password của `repmgr`
+
+Chart `postgresql-ha` sẽ đọc secret này qua `postgresql.existingSecret`.
+
+#### `kubernetes_secret_v1.pgpool_auth`
+- chứa:
+  - password admin của Pgpool
+  - password sr-check của Pgpool
+
+Chart sẽ đọc secret này qua `pgpool.existingSecret`.
+
+#### `helm_release.postgresql_ha`
+- cài chart `bitnami/postgresql-ha`
+- dùng `templatefile()` để render values từ file `helm-values/postgresql-ha-values.yaml.tftpl`
+
+Điểm quan trọng:
+- release này là trái tim của phase 1
+- nó tạo StatefulSet/Deployment/Service/PVC bên trong cluster
+- Terraform không tự viết tay các manifest DB, mà để Helm chart quản lý
+
+### `backup.tf`
+
+Đây là file triển khai phase 2.
+
+Nó xử lý 3 nhóm việc:
+
+#### 1. Hạ tầng S3 backup
+- tùy chọn tạo bucket backup riêng
+- bật ownership controls
+- bật public access block
+- bật versioning
+- bật encryption
+- thêm lifecycle retention
+
+#### 2. IAM và Pod Identity cho backup job
+- tạo IAM role cho backup job
+- gắn policy ghi S3
+- tạo service account backup trong Kubernetes
+- tạo `aws_eks_pod_identity_association` để backup pod có quyền ghi S3
+
+#### 3. Kubernetes CronJob backup
+- tạo `kubernetes_cron_job_v1.backup`
+- container thứ nhất chạy `pg_dumpall`
+- ghi file dump nén vào `emptyDir`
+- container thứ hai dùng AWS CLI upload file đó lên S3
+
+Lưu ý thiết kế hiện tại:
+- backup đang dùng `emptyDir` làm volume tạm, không có PVC backup riêng
+- mục tiêu là dump xong rồi đẩy thẳng lên S3
+
+### `outputs.tf`
+
+File này xuất ra các giá trị quan trọng để vận hành:
+- namespace của PostgreSQL
+- tên Helm release
+- tên service Pgpool
+- FQDN nội bộ của Pgpool
+- bucket backup đang dùng
+- tên CronJob backup
+
+### `helm-values/postgresql-ha-values.yaml.tftpl`
+
+Đây là file template values của chart `bitnami/postgresql-ha`.
+
+File này render các cấu hình quan trọng như:
+- `postgresql.replicaCount`
+- `postgresql.existingSecret`
+- `postgresql.persistence.storageClass`
+- `postgresql.persistence.size`
+- `postgresql.resources`
+- `pgpool.replicaCount`
+- `pgpool.existingSecret`
+- `service.type`
+- `metrics.enabled`
+- `metrics.serviceMonitor.enabled`
+
+Nói ngắn gọn:
+- `main.tf` cài Helm chart
+- file `.tftpl` quyết định chart đó được cấu hình như thế nào
+
+## 6. Phase 1: PostgreSQL HA bằng Helm
 
 Helm chart dùng:
 - repository: `https://charts.bitnami.com/bitnami`
@@ -101,7 +261,7 @@ Ví dụ với mặc định hiện tại:
 postgresql-ha-pgpool.data.svc.cluster.local:5432
 ```
 
-## 6. Phase 2: Backup và monitoring
+## 7. Phase 2: Backup và monitoring
 
 ### Backup ra S3
 
@@ -124,7 +284,7 @@ Khi thêm `enable_service_monitor = true`, chart sẽ tạo `ServiceMonitor`.
 Lưu ý:
 - cluster phải có Prometheus Operator CRDs, nếu không Helm release sẽ fail
 
-## 7. Luồng apply thực tế
+## 8. Luồng apply thực tế
 
 ### Bước 1. Chuẩn bị backend
 
@@ -152,7 +312,7 @@ terraform plan -out data-postgres.tfplan
 terraform apply data-postgres.tfplan
 ```
 
-## 8. Kiểm tra sau khi apply
+## 9. Kiểm tra sau khi apply
 
 ### Kubernetes
 
@@ -168,7 +328,7 @@ kubectl get cronjob -n data
 - kiểm tra Pod Identity association cho backup nếu bật
 - kiểm tra bucket backup nếu `create_backup_bucket = true`
 
-## 9. Restore test khuyến nghị
+## 10. Restore test khuyến nghị
 
 Stack này chưa tự động tạo restore job vì restore test production nên làm có chủ đích.
 
@@ -179,7 +339,7 @@ Khuyến nghị tối thiểu:
 4. Chạy `gunzip -c backup.sql.gz | psql ...` để import vào DB test.
 5. Kiểm tra bảng, schema và quyền truy cập sau restore.
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### Helm release fail với `ServiceMonitor`
 
@@ -212,7 +372,7 @@ Cách xử lý:
 - kiểm tra `postgresql_storage_class`
 - kiểm tra `kubectl describe pvc -n <namespace>`
 
-## 11. Production checklist
+## 12. Production checklist
 
 - dùng ít nhất `postgresql_replica_count = 3`
 - dùng explicit resources, không dựa vào `resourcesPreset`
@@ -222,7 +382,7 @@ Cách xử lý:
 - cân nhắc dùng image nội bộ thay cho image public của backup job
 - cân nhắc node group riêng cho database nếu workload lớn
 
-## 12. Tóm tắt dễ nhớ
+## 13. Tóm tắt dễ nhớ
 
 `03-data-postgres` là stack data layer cho PostgreSQL HA trên EKS.
 
