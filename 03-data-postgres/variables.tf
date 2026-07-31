@@ -243,7 +243,7 @@ variable "backup_retention_days" {
 variable "backup_postgres_image" {
   type        = string
   description = "Container image used to produce pg_dumpall backups."
-  default     = "docker.io/bitnami/postgresql:17.6.0-debian-12-r2"
+  default     = "docker.io/bitnamilegacy/postgresql:17.6.0-debian-12-r2"
 }
 
 variable "backup_awscli_image" {
