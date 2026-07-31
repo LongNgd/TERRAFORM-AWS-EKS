@@ -18,7 +18,7 @@ Stack này chịu trách nhiệm cho:
 - PostgreSQL HA release bằng Helm
 - Kubernetes secrets cho DB và Pgpool
 - backup CronJob ra S3
-- backup IAM role và Pod Identity association
+- backup IAM role và IRSA annotation cho service account backup
 - monitoring toggle cho metrics / ServiceMonitor
 
 Stack này không tạo:
@@ -72,7 +72,7 @@ Stack này không tạo:
 2. Kết nối vào EKS bằng provider `kubernetes` và `helm`.
 3. Tạo namespace và secrets cho PostgreSQL/Pgpool.
 4. Cài Helm chart `bitnami/postgresql-ha`.
-5. Nếu bật phase 2, tạo S3 backup bucket tùy chọn, IAM role, Pod Identity và CronJob backup.
+5. Nếu bật phase 2, tạo S3 backup bucket tùy chọn, IAM role, IRSA annotation và CronJob backup.
 6. Nếu bật metrics, chart sẽ bật exporter và có thể tạo ServiceMonitor.
 
 Điều kiện quan trọng trước khi apply:
@@ -133,6 +133,7 @@ File này tạo các giá trị dùng lại nhiều lần:
 - tên service account backup
 - tên bucket backup cuối cùng
 - FQDN nội bộ của Pgpool service
+- hostname nội bộ của PostgreSQL primary cho backup full dump
 
 Ví dụ:
 - `local.pgpool_service_name`
@@ -193,11 +194,11 @@ Nó xử lý 3 nhóm việc:
 - bật encryption
 - thêm lifecycle retention
 
-#### 2. IAM và Pod Identity cho backup job
+#### 2. IAM và IRSA cho backup job
 - tạo IAM role cho backup job
 - gắn policy ghi S3
 - tạo service account backup trong Kubernetes
-- tạo `aws_eks_pod_identity_association` để backup pod có quyền ghi S3
+- annotate service account với `eks.amazonaws.com/role-arn` để backup pod dùng IRSA lấy quyền ghi S3
 
 #### 3. Kubernetes CronJob backup
 - tạo `kubernetes_cron_job_v1.backup`
@@ -208,6 +209,7 @@ Nó xử lý 3 nhóm việc:
 Lưu ý thiết kế hiện tại:
 - backup đang dùng `emptyDir` làm volume tạm, không có PVC backup riêng
 - mục tiêu là dump xong rồi đẩy thẳng lên S3
+- `pg_dumpall` đi thẳng vào PostgreSQL primary, không đi qua `pgpool`, để tránh lỗi SCRAM và đảm bảo full cluster logical dump
 
 ### `outputs.tf`
 
@@ -341,7 +343,7 @@ Bạn muốn thấy:
 
 ### AWS
 
-- kiểm tra Pod Identity association cho backup nếu bật
+- kiểm tra IAM role và IRSA annotation của service account backup nếu bật
 - kiểm tra bucket backup nếu `create_backup_bucket = true`
 - kiểm tra EBS volumes được tạo nếu PVC đã `Bound`
 
@@ -377,12 +379,13 @@ Cách xử lý:
 
 Nguyên nhân thường gặp:
 - bucket name chưa đúng
-- Pod Identity chưa tạo xong
+- IRSA chưa vào đúng service account backup hoặc OIDC/IAM chưa sẵn sàng
 - IAM role backup thiếu quyền S3
 
 Cách xử lý:
 - kiểm tra `backup_bucket_name`
-- kiểm tra Pod Identity association trong EKS Access
+- kiểm tra service account backup có annotation `eks.amazonaws.com/role-arn`
+- kiểm tra IAM role trust `sts:AssumeRoleWithWebIdentity`
 - kiểm tra logs của job backup
 
 ### Pod PostgreSQL không lên do PVC
