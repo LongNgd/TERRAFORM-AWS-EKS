@@ -29,6 +29,11 @@ output "load_balancer_controller_role_arn" {
   value       = aws_iam_role.load_balancer_controller.arn
 }
 
+output "eks_oidc_provider_arn" {
+  description = "IAM OIDC provider ARN used for IRSA on this EKS cluster."
+  value       = aws_iam_openid_connect_provider.eks.arn
+}
+
 output "private_subnet_ids" {
   description = "Private subnet IDs used by EKS and RDS."
   value       = aws_subnet.private[*].id

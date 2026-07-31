@@ -62,19 +62,28 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup" {
   }
 }
 
-data "aws_iam_policy_document" "pod_identity_assume_role" {
+data "aws_iam_policy_document" "backup_irsa_assume_role" {
   count = var.enable_s3_backup ? 1 : 0
 
   statement {
-    effect = "Allow"
-    actions = [
-      "sts:AssumeRole",
-      "sts:TagSession"
-    ]
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
 
     principals {
-      type        = "Service"
-      identifiers = ["pods.eks.amazonaws.com"]
+      type        = "Federated"
+      identifiers = [data.terraform_remote_state.infrastructure.outputs.eks_oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.eks_oidc_issuer_hostpath}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.eks_oidc_issuer_hostpath}:sub"
+      values   = ["system:serviceaccount:${var.postgres_namespace}:${local.backup_service_account}"]
     }
   }
 }
@@ -106,7 +115,7 @@ data "aws_iam_policy_document" "backup_s3" {
 resource "aws_iam_role" "backup" {
   count              = var.enable_s3_backup ? 1 : 0
   name               = "${var.postgres_release_name}-backup"
-  assume_role_policy = data.aws_iam_policy_document.pod_identity_assume_role[0].json
+  assume_role_policy = data.aws_iam_policy_document.backup_irsa_assume_role[0].json
 
   lifecycle {
     precondition {
@@ -129,18 +138,10 @@ resource "kubernetes_service_account_v1" "backup" {
   metadata {
     name      = local.backup_service_account
     namespace = kubernetes_namespace_v1.postgres.metadata[0].name
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.backup[0].arn
+    }
   }
-}
-
-resource "aws_eks_pod_identity_association" "backup" {
-  count = var.enable_s3_backup ? 1 : 0
-
-  cluster_name    = data.terraform_remote_state.infrastructure.outputs.cluster_name
-  namespace       = var.postgres_namespace
-  service_account = kubernetes_service_account_v1.backup[0].metadata[0].name
-  role_arn        = aws_iam_role.backup[0].arn
-
-  depends_on = [kubernetes_service_account_v1.backup]
 }
 
 resource "kubernetes_cron_job_v1" "backup" {
@@ -160,7 +161,7 @@ resource "kubernetes_cron_job_v1" "backup" {
 
   depends_on = [
     helm_release.postgresql_ha,
-    aws_eks_pod_identity_association.backup
+    kubernetes_service_account_v1.backup
   ]
 
   spec {
@@ -204,7 +205,7 @@ resource "kubernetes_cron_job_v1" "backup" {
                 TS="$(date -u +%Y%m%dT%H%M%SZ)"
                 FILE="/backup/$${TS}-pgdumpall.sql.gz"
                 export PGPASSWORD="$PGPASSWORD"
-                pg_dumpall -h ${local.pgpool_service_name} -p 5432 -U postgres | gzip -c > "$FILE"
+                pg_dumpall -h ${local.postgresql_primary_host} -p 5432 -U postgres | gzip -c > "$FILE"
                 test -s "$FILE"
               EOT
               ]
