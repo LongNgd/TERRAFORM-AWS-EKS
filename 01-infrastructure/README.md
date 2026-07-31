@@ -21,6 +21,7 @@ Stack này chịu trách nhiệm tạo các thành phần nền tảng:
 - EKS cluster
 - EKS managed node group
 - EKS add-ons
+- EBS CSI driver add-on
 - IAM roles và policies
 - EKS Pod Identity association cho application pod
 - IAM OIDC provider và IRSA role cho AWS Load Balancer Controller
@@ -81,6 +82,7 @@ Stack này không cài:
 | `cluster_name` | Tên EKS cluster để stack sau kết nối |
 | `cluster_endpoint` | API endpoint của EKS |
 | `cluster_certificate_authority_data` | CA data của cluster |
+| `load_balancer_controller_role_arn` | IAM role ARN của AWS Load Balancer Controller dùng cho IRSA |
 | `vpc_id` | ID của VPC đã tạo |
 | `public_subnet_ids` | Danh sách public subnets |
 | `private_subnet_ids` | Danh sách private subnets |
@@ -167,6 +169,8 @@ data "aws_caller_identity" "current" {}
 Ý nghĩa:
 - lấy danh sách AZ đang usable trong region
 - lấy thông tin account hiện tại để sinh tên bucket hoặc resource theo account ID
+
+Stack này còn dùng `data.tls_certificate.eks_oidc` trong `iam.tf` để lấy thumbprint từ OIDC issuer của EKS trước khi tạo `aws_iam_openid_connect_provider` cho IRSA.
 
 ### `locals.tf`
 
@@ -400,15 +404,26 @@ Và:
 
 ```hcl
 resource "aws_eks_addon" "main" {
-  for_each     = local.eks_addons
-  most_recent  = true
+  for_each = local.eks_addons
   ...
 }
 ```
 
 Ý nghĩa:
 - cài các add-on thiết yếu cho EKS
-- `most_recent = true` để lấy bản mới nhất tương thích ở thời điểm apply
+
+Ngoài nhóm add-on này, stack còn cài riêng managed add-on:
+
+```hcl
+resource "aws_eks_addon" "ebs_csi" {
+  addon_name = "aws-ebs-csi-driver"
+  ...
+}
+```
+
+Ý nghĩa:
+- cấp persistent volume EBS cho workload stateful như PostgreSQL trên EKS
+- đây là thành phần bắt buộc nếu muốn PVC provision được volume EBS
 
 ### 6.6. Pod Identity và IRSA
 
@@ -691,6 +706,7 @@ Trước khi dùng stack này cho production, nên kiểm tra các mục sau:
 - `db_skip_final_snapshot` mặc định đang `true`
 - `eks_endpoint_public_access` mặc định đang `true`
 - `bootstrap_cluster_creator_admin_permissions` đang bật
+- nếu dùng workload stateful trên EKS, phải xác nhận `aws-ebs-csi-driver` đã `Active`
 - chưa thấy WAF, CloudTrail, GuardDuty, VPC Flow Logs, backup strategy đầy đủ
 - chưa có DB subnet tier tách riêng khỏi private app subnets nếu baseline yêu cầu chặt hơn
 

@@ -103,6 +103,30 @@ data "aws_iam_policy_document" "load_balancer_controller_irsa_assume_role" {
   }
 }
 
+data "aws_iam_policy_document" "ebs_csi_irsa_assume_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.eks_oidc_issuer_hostpath}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${local.eks_oidc_issuer_hostpath}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+  }
+}
+
 resource "aws_iam_policy" "load_balancer_controller" {
   name        = "${local.name}-aws-load-balancer-controller"
   description = "Permissions for AWS Load Balancer Controller v3.4.2."
@@ -150,4 +174,14 @@ resource "aws_iam_role_policy" "application_s3" {
   name   = "application-s3"
   role   = aws_iam_role.application.id
   policy = data.aws_iam_policy_document.application_s3.json
+}
+
+resource "aws_iam_role" "ebs_csi" {
+  name               = "${local.name}-ebs-csi-driver"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_irsa_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  role       = aws_iam_role.ebs_csi.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }

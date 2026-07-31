@@ -12,6 +12,7 @@ Repository này dựng kiến trúc được mô tả trong sơ đồ, gồm:
   - Amazon RDS for PostgreSQL ở chế độ Multi-AZ
   - hoặc PostgreSQL HA chạy trên EKS bằng Helm chart `bitnami/postgresql-ha`
 - private Amazon S3 bucket và S3 Gateway VPC Endpoint
+- EBS CSI driver để cấp persistent volume cho workload stateful trên EKS
 - IAM access cho AWS Load Balancer Controller qua IRSA và cho application service account qua EKS Pod Identity
 - Terraform remote state trên S3 với S3-native lock files
 
@@ -185,6 +186,10 @@ terraform apply data-postgres.tfplan
 
 Điền các password PostgreSQL/Pgpool qua `terraform.tfvars`, `TF_VAR_*` hoặc secret manager trước khi apply.
 
+Lưu ý:
+- cluster phải có `aws-ebs-csi-driver`
+- `postgresql_storage_class` phải khớp một StorageClass có thật trong cluster, ví dụ `gp2` nếu đó là StorageClass hiện có
+
 Kiểm tra:
 
 ```bash
@@ -193,6 +198,14 @@ kubectl get pvc -n data
 kubectl get svc -n data
 kubectl get cronjob -n data
 terraform output pgpool_service_fqdn
+```
+
+Để test backup thủ công:
+
+```bash
+kubectl create job --from=cronjob/postgresql-ha-s3-backup -n data backup-manual-test
+kubectl get jobs -n data
+kubectl get pods -n data
 ```
 
 ## Luồng traffic
@@ -226,6 +239,7 @@ EKS nodes and pods requiring internet egress
 - Chạy Terraform từ CI role được kiểm soát và giới hạn EKS public endpoint chỉ cho runner đó, hoặc tắt public endpoint và chạy từ bên trong VPC.
 - Tách private subnet cho application và database nếu baseline bảo mật yêu cầu DB tier riêng.
 - Nếu dùng `03-data-postgres`, bật backup S3, kiểm tra restore định kỳ và cân nhắc node group riêng cho database workload.
+- Nếu dùng `03-data-postgres`, xác nhận StorageClass và EBS CSI driver đã sẵn sàng trước khi apply.
 - Bổ sung Route 53, AWS WAF, CloudWatch alarms, GuardDuty, CloudTrail, VPC Flow Logs, AWS Backup và tích hợp application secrets.
 - Rà lại IAM policy của Load Balancer Controller và giới hạn theo VPC hoặc cluster tags khi phù hợp.
 - Rà lại chi phí hàng tháng trước khi apply. Hai NAT Gateways, EKS, từ hai EC2 node trở lên và PostgreSQL HA với nhiều PVC/replica đều phát sinh chi phí liên tục.

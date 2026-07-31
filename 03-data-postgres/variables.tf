@@ -39,9 +39,9 @@ variable "postgresql_replica_count" {
   default     = 3
 
   validation {
-    condition     = var.postgresql_replica_count >= 3 && var.postgresql_replica_count % 2 == 1
-    error_message = "postgresql_replica_count must be an odd number and at least 3."
-  }
+  condition     = var.postgresql_replica_count >= 1
+  error_message = "postgresql_replica_count must be at least 1."
+}
 }
 
 variable "postgresql_sync_replication" {

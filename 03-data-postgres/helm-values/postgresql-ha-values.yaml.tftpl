@@ -1,6 +1,10 @@
 fullnameOverride: "${fullname_override}"
 
 postgresql:
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql-repmgr
+    tag: 17.6.0-debian-12-r2
   username: "${postgresql_username}"
   database: "${postgresql_database}"
   existingSecret: "${postgresql_secret_name}"
@@ -23,12 +27,17 @@ postgresql:
     limits:
       cpu: "${postgresql_limits_cpu}"
       memory: "${postgresql_limits_memory}"
-  persistence:
-    enabled: true
-    storageClass: "${postgresql_storage_class}"
-    size: "${postgresql_storage_size}"
+
+persistence:
+  enabled: true
+  storageClass: "${postgresql_storage_class}"
+  size: "${postgresql_storage_size}"
 
 pgpool:
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/pgpool
+    tag: 4.6.3-debian-12-r0
   existingSecret: "${pgpool_secret_name}"
   adminUsername: "${pgpool_admin_username}"
   srCheckUsername: "${pgpool_sr_check_username}"
@@ -54,6 +63,10 @@ service:
   type: "${pgpool_service_type}"
 
 metrics:
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgres-exporter
+    tag: 0.17.1-debian-12-r16
   enabled: ${enable_metrics}
   serviceMonitor:
     enabled: ${enable_service_monitor}

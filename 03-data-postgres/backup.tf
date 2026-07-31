@@ -170,6 +170,12 @@ resource "kubernetes_cron_job_v1" "backup" {
     failed_jobs_history_limit     = 3
 
     job_template {
+      metadata {
+        labels = {
+          app = "${var.postgres_release_name}-backup"
+        }
+      }
+
       spec {
         backoff_limit = 1
 
@@ -196,7 +202,7 @@ resource "kubernetes_cron_job_v1" "backup" {
               command = ["/bin/sh", "-ec"]
               args = [<<-EOT
                 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-                FILE="/backup/${TS}-pgdumpall.sql.gz"
+                FILE="/backup/$${TS}-pgdumpall.sql.gz"
                 export PGPASSWORD="$PGPASSWORD"
                 pg_dumpall -h ${local.pgpool_service_name} -p 5432 -U postgres | gzip -c > "$FILE"
                 test -s "$FILE"

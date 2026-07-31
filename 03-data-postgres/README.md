@@ -75,6 +75,10 @@ Stack này không tạo:
 5. Nếu bật phase 2, tạo S3 backup bucket tùy chọn, IAM role, Pod Identity và CronJob backup.
 6. Nếu bật metrics, chart sẽ bật exporter và có thể tạo ServiceMonitor.
 
+Điều kiện quan trọng trước khi apply:
+- cluster phải có `aws-ebs-csi-driver`
+- `postgresql_storage_class` phải là StorageClass có thật trong cluster
+
 ## 5. Giải thích từng file
 
 ### `versions.tf`
@@ -172,7 +176,7 @@ Chart sẽ đọc secret này qua `pgpool.existingSecret`.
 
 Điểm quan trọng:
 - release này là trái tim của phase 1
-- nó tạo StatefulSet/Deployment/Service/PVC bên trong cluster
+- chính Helm chart sẽ sinh ra các resource Kubernetes tương ứng như PostgreSQL StatefulSet, Pgpool Deployment, Service và PVC bên trong cluster
 - Terraform không tự viết tay các manifest DB, mà để Helm chart quản lý
 
 ### `backup.tf`
@@ -222,11 +226,14 @@ File này xuất ra các giá trị quan trọng để vận hành:
 File này render các cấu hình quan trọng như:
 - `postgresql.replicaCount`
 - `postgresql.existingSecret`
-- `postgresql.persistence.storageClass`
-- `postgresql.persistence.size`
+- `persistence.storageClass`
+- `persistence.size`
 - `postgresql.resources`
 - `pgpool.replicaCount`
 - `pgpool.existingSecret`
+- `postgresql.image`
+- `pgpool.image`
+- `metrics.image`
 - `service.type`
 - `metrics.enabled`
 - `metrics.serviceMonitor.enabled`
@@ -248,6 +255,10 @@ Các mặc định production-minded đang được set:
 - `pgpool.podAntiAffinityPreset = hard`
 - `persistence.enabled = true`
 - `service.type = ClusterIP`
+
+Lưu ý thực tế:
+- nếu cluster hiện tại có ít node hoặc ít AZ usable, replica thứ 3 có thể `Pending` do anti-affinity và topology spread
+- khi đó bạn phải hoặc tăng capacity cluster, hoặc review lại số replica / scheduling policy theo nhu cầu thực tế
 
 App trong cluster nên kết nối qua:
 
@@ -323,10 +334,16 @@ kubectl get svc -n data
 kubectl get cronjob -n data
 ```
 
+Bạn muốn thấy:
+- PostgreSQL và Pgpool pods `Running`
+- PVC `Bound`
+- CronJob backup đã tồn tại
+
 ### AWS
 
 - kiểm tra Pod Identity association cho backup nếu bật
 - kiểm tra bucket backup nếu `create_backup_bucket = true`
+- kiểm tra EBS volumes được tạo nếu PVC đã `Bound`
 
 ## 10. Restore test khuyến nghị
 
@@ -338,6 +355,12 @@ Khuyến nghị tối thiểu:
 3. Tải một file backup mới nhất từ S3.
 4. Chạy `gunzip -c backup.sql.gz | psql ...` để import vào DB test.
 5. Kiểm tra bảng, schema và quyền truy cập sau restore.
+
+Bạn cũng có thể test kết nối nhanh từ local qua `port-forward`:
+
+```bash
+kubectl -n data port-forward svc/postgresql-ha-pgpool 5432:5432
+```
 
 ## 11. Troubleshooting
 
@@ -367,10 +390,23 @@ Cách xử lý:
 Nguyên nhân thường gặp:
 - storage class không tồn tại
 - thiếu disk quota
+- cluster chưa cài `aws-ebs-csi-driver`
 
 Cách xử lý:
 - kiểm tra `postgresql_storage_class`
 - kiểm tra `kubectl describe pvc -n <namespace>`
+- kiểm tra `kubectl get csidriver`
+- kiểm tra `kubectl get pods -n kube-system | findstr ebs`
+
+### Pod PostgreSQL hoặc Pgpool bị `ImagePullBackOff`
+
+Nguyên nhân thường gặp:
+- chart đang dùng Debian-based tags cũ của Bitnami
+- image cần pull từ `bitnamilegacy/*` thay vì `bitnami/*`
+
+Cách xử lý:
+- kiểm tra `kubectl describe pod -n data <pod-name>`
+- kiểm tra file values template đang override `postgresql.image`, `pgpool.image`, `metrics.image` đúng repo/tag
 
 ## 12. Production checklist
 
@@ -380,6 +416,7 @@ Cách xử lý:
 - restore test phải được chạy định kỳ ngoài production path
 - ServiceMonitor chỉ bật khi cluster có Prometheus Operator
 - cân nhắc dùng image nội bộ thay cho image public của backup job
+- xác nhận EBS CSI driver đã chạy và StorageClass dùng trong tfvars tồn tại thật trong cluster
 - cân nhắc node group riêng cho database nếu workload lớn
 
 ## 13. Tóm tắt dễ nhớ
