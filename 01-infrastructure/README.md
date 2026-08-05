@@ -127,6 +127,11 @@ terraform {
       source  = "hashicorp/aws"
       version = "6.56.0"
     }
+
+    tls = {
+      source  = "hashicorp/tls"
+      version = "4.3.0"
+    }
   }
 }
 ```
@@ -135,6 +140,7 @@ terraform {
 - khóa version Terraform CLI theo range cho phép
 - khai báo backend `s3` để state nằm trên bucket đã bootstrap
 - pin AWS provider `6.56.0`
+- dùng thêm provider `tls` để lấy thumbprint khi tạo IAM OIDC provider cho IRSA
 
 ### `providers.tf`
 

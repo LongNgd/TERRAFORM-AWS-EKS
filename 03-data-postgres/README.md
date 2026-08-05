@@ -39,7 +39,7 @@ Stack này không tạo:
 | `postgres_namespace` | Không | Namespace đặt PostgreSQL |
 | `postgres_release_name` | Không | Tên Helm release |
 | `postgres_chart_version` | Không | Version chart `bitnami/postgresql-ha` |
-| `postgresql_replica_count` | Không | Số PostgreSQL replicas, tối thiểu 3 và số lẻ |
+| `postgresql_replica_count` | Không | Số PostgreSQL replicas; hiện repo cho phép giảm xuống để chạy trên cluster nhỏ |
 | `postgresql_storage_class` | Không | StorageClass cho PVC |
 | `postgresql_storage_size` | Không | Dung lượng PVC mỗi replica |
 | `postgresql_username` | Không | User ứng dụng |
@@ -114,6 +114,7 @@ File này làm 3 việc:
 - nó lấy `cluster_name` từ state của `01`
 - sau đó gọi `data.aws_eks_cluster.main` để lấy endpoint và certificate authority
 - auth vào cluster bằng `aws eks get-token`
+- nó cũng đọc OIDC provider ARN từ remote state của `01` để cấu hình IRSA cho backup job
 
 ### `variables.tf`
 
@@ -250,17 +251,18 @@ Helm chart dùng:
 - repository: `https://charts.bitnami.com/bitnami`
 - chart: `postgresql-ha`
 
-Các mặc định production-minded đang được set:
-- `postgresql.replicaCount = 3`
-- `postgresql.podAntiAffinityPreset = hard`
-- `pgpool.replicaCount = 2`
-- `pgpool.podAntiAffinityPreset = hard`
+Các mặc định hiện tại của repo đang nghiêng về cấu hình gọn hơn để chạy được trên cluster nhỏ:
+- `postgresql.replicaCount = 2`
+- `postgresql.podAntiAffinityPreset = soft`
+- `pgpool.replicaCount = 1`
+- `pgpool.podAntiAffinityPreset = soft`
 - `persistence.enabled = true`
 - `service.type = ClusterIP`
+- `enable_metrics = false` trong `terraform.tfvars` hiện tại
 
 Lưu ý thực tế:
-- nếu cluster hiện tại có ít node hoặc ít AZ usable, replica thứ 3 có thể `Pending` do anti-affinity và topology spread
-- khi đó bạn phải hoặc tăng capacity cluster, hoặc review lại số replica / scheduling policy theo nhu cầu thực tế
+- nếu muốn tăng lại mức HA, bạn phải đảm bảo cluster đủ CPU, memory, pod slots và khả năng schedule giữa các node/AZ
+- nếu backend chạy trên máy local, không dùng trực tiếp DNS `*.svc.cluster.local`; hãy dùng `kubectl port-forward`
 
 App trong cluster nên kết nối qua:
 
@@ -281,7 +283,7 @@ postgresql-ha-pgpool.data.svc.cluster.local:5432
 Khi `enable_s3_backup = true`, stack sẽ tạo:
 - service account riêng cho backup
 - IAM role với quyền ghi S3
-- Pod Identity association
+- IRSA annotation trên service account backup
 - CronJob chạy `pg_dumpall | gzip` rồi upload lên S3
 
 Lưu ý:
@@ -361,8 +363,14 @@ Khuyến nghị tối thiểu:
 Bạn cũng có thể test kết nối nhanh từ local qua `port-forward`:
 
 ```bash
-kubectl -n data port-forward svc/postgresql-ha-pgpool 5432:5432
+kubectl -n data port-forward svc/postgresql-ha-pgpool 15432:5432
 ```
+
+Khi đó app local hoặc DBeaver dùng:
+- host: `127.0.0.1`
+- port: `15432`
+
+DNS nội bộ như `postgresql-ha-pgpool.data.svc.cluster.local` chỉ dùng được với pod chạy bên trong cluster.
 
 ## 11. Troubleshooting
 
@@ -413,7 +421,7 @@ Cách xử lý:
 
 ## 12. Production checklist
 
-- dùng ít nhất `postgresql_replica_count = 3`
+- chọn `postgresql_replica_count` theo năng lực thật của cluster; nếu tăng replica thì phải tăng capacity tương ứng
 - dùng explicit resources, không dựa vào `resourcesPreset`
 - backup S3 phải bật và được kiểm tra định kỳ
 - restore test phải được chạy định kỳ ngoài production path

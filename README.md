@@ -231,6 +231,10 @@ EKS nodes and pods requiring internet egress
   -> Internet
 ```
 
+Lưu ý truy cập database:
+- pod/backend chạy trong cluster dùng DNS nội bộ như `postgresql-ha-pgpool.data.svc.cluster.local:5432`
+- backend chạy trên máy local không dùng được DNS này; hãy `kubectl port-forward svc/postgresql-ha-pgpool 15432:5432` rồi kết nối tới `127.0.0.1:15432`
+
 ## Các thay đổi nên làm trước khi go-live
 
 - Đặt `db_deletion_protection = true`.
