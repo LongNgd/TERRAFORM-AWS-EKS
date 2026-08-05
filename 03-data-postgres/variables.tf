@@ -119,11 +119,11 @@ variable "pgpool_sr_check_password" {
 variable "pgpool_replica_count" {
   type        = number
   description = "Number of Pgpool replicas."
-  default     = 2
+  default     = 1
 
   validation {
-    condition     = var.pgpool_replica_count >= 2
-    error_message = "pgpool_replica_count must be at least 2."
+    condition     = var.pgpool_replica_count >= 1
+    error_message = "pgpool_replica_count must be at least 1."
   }
 }
 
