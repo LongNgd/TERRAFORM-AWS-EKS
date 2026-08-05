@@ -8,7 +8,7 @@ Nói ngắn gọn:
 - `01-infrastructure` tạo hạ tầng AWS cốt lõi
 - `02-platform` cài add-on và workload lên EKS
 
-## 1. Mục đích của `01-infrastructure`
+## Mục đích của `01-infrastructure`
 
 Stack này chịu trách nhiệm tạo các thành phần nền tảng:
 - VPC
@@ -31,7 +31,7 @@ Stack này chịu trách nhiệm tạo các thành phần nền tảng:
 
 Đây là stack tạo phần "AWS infrastructure", chưa đụng tới Helm release hay Kubernetes app sample.
 
-## 2. Phạm vi của stack
+## Phạm vi của stack
 
 Stack này chịu trách nhiệm cho lớp hạ tầng AWS cốt lõi:
 - network
@@ -45,7 +45,7 @@ Stack này không cài:
 - Kubernetes namespace, deployment, service, ingress
 - workload ứng dụng thật bên trong cluster
 
-## 3. Input và output
+## Input và output
 
 ### Input chính
 
@@ -94,7 +94,7 @@ Stack này không cài:
 
 Các output này nằm trong `outputs.tf`.
 
-## 4. Luồng chạy tổng thể
+## Luồng chạy tổng thể
 
 Luồng logic:
 
@@ -113,7 +113,7 @@ Luồng logic:
 13. Terraform tạo S3 bucket riêng cho ứng dụng.
 14. Terraform xuất output để `02-platform` đọc lại qua remote state.
 
-## 5. Giải thích từng file
+## Giải thích từng file
 
 ### `versions.tf`
 
@@ -200,11 +200,11 @@ thì:
 - `local.name = "longnd-dev"`
 - `local.cluster_name = "longnd-dev-eks"`
 
-## 6. Giải thích phần network trong `network.tf`
+## Giải thích phần network trong `network.tf`
 
 Stack này tạo một VPC trải trên 2 Availability Zones.
 
-### 5.1. VPC
+### VPC
 
 ```hcl
 resource "aws_vpc" "main" {
@@ -218,7 +218,7 @@ resource "aws_vpc" "main" {
 - tạo VPC riêng cho hệ thống
 - bật DNS support và DNS hostnames để EKS, RDS và nhiều service AWS hoạt động bình thường
 
-### 5.2. Internet Gateway
+### Internet Gateway
 
 ```hcl
 resource "aws_internet_gateway" "main" {
@@ -229,7 +229,7 @@ resource "aws_internet_gateway" "main" {
 Ý nghĩa:
 - cho phép public subnets đi ra Internet
 
-### 5.3. Public subnets
+### Public subnets
 
 ```hcl
 resource "aws_subnet" "public" {
@@ -251,7 +251,7 @@ Tag quan trọng:
 Ý nghĩa:
 - cho AWS Load Balancer Controller biết subnet nào có thể dùng cho internet-facing ALB
 
-### 5.4. Private subnets
+### Private subnets
 
 ```hcl
 resource "aws_subnet" "private" {
@@ -271,7 +271,7 @@ Tag quan trọng:
 Ý nghĩa:
 - cho phép dùng internal load balancer nếu cần trong tương lai
 
-### 5.5. Route tables
+### Route tables
 
 Stack này tạo:
 - 1 public route table có route `0.0.0.0/0` ra Internet Gateway
@@ -281,7 +281,7 @@ Stack này tạo:
 - public subnet đi Internet trực tiếp
 - private subnet không public, nhưng vẫn có egress ra ngoài qua NAT
 
-### 5.6. NAT Gateway và EIP
+### NAT Gateway và EIP
 
 ```hcl
 resource "aws_eip" "nat" {
@@ -301,7 +301,7 @@ Lợi ích:
 - private subnets của từng AZ có đường egress riêng
 - giảm single point of failure giữa các AZ
 
-### 5.7. S3 Gateway VPC Endpoint
+### S3 Gateway VPC Endpoint
 
 ```hcl
 resource "aws_vpc_endpoint" "s3" {
@@ -316,9 +316,9 @@ resource "aws_vpc_endpoint" "s3" {
 - cho private workloads truy cập S3 mà không cần đi ra Internet qua NAT
 - giảm chi phí NAT và giảm dependency vào public egress cho traffic S3
 
-## 7. Giải thích phần EKS trong `eks.tf`
+## Giải thích phần EKS trong `eks.tf`
 
-### 6.1. KMS key cho secret encryption
+### KMS key cho secret encryption
 
 ```hcl
 resource "aws_kms_key" "eks" { ... }
@@ -328,7 +328,7 @@ resource "aws_kms_alias" "eks" { ... }
 Ý nghĩa:
 - dùng để mã hóa Kubernetes secrets ở cấp EKS control plane
 
-### 6.2. CloudWatch log group cho EKS control plane logs
+### CloudWatch log group cho EKS control plane logs
 
 ```hcl
 resource "aws_cloudwatch_log_group" "eks" {
@@ -341,7 +341,7 @@ resource "aws_cloudwatch_log_group" "eks" {
 - giữ log control plane 30 ngày
 - phục vụ audit, debug, incident analysis
 
-### 6.3. EKS cluster
+### EKS cluster
 
 ```hcl
 resource "aws_eks_cluster" "main" {
@@ -371,7 +371,7 @@ Giải thích `vpc_config`:
 - `public_access_cidrs = var.cluster_public_access_cidrs`
   - nếu public endpoint bật, chỉ cho các CIDR này truy cập
 
-### 6.4. Managed node group
+### Managed node group
 
 ```hcl
 resource "aws_eks_node_group" "general" {
@@ -394,7 +394,7 @@ resource "aws_eks_node_group" "general" {
   - rolling update ở mức an toàn hơn
 - có label `workload = "general"`
 
-### 6.5. EKS add-ons
+### EKS add-ons
 
 ```hcl
 locals {
@@ -432,7 +432,7 @@ resource "aws_eks_addon" "ebs_csi" {
 - cấp persistent volume EBS cho workload stateful như PostgreSQL trên EKS
 - đây là thành phần bắt buộc nếu muốn PVC provision được volume EBS
 
-### 6.6. Pod Identity và IRSA
+### Pod Identity và IRSA
 
 Stack này đang dùng 2 cơ chế IAM cho workload trong cluster:
 - IRSA cho `aws-load-balancer-controller`
@@ -444,7 +444,7 @@ Stack này đang dùng 2 cơ chế IAM cho workload trong cluster:
 
 Điều này cho phép controller dùng AWS API để tạo ALB mà không cần access key tĩnh, còn application pod vẫn dùng Pod Identity như cũ.
 
-### 6.7. Access entries cho admin roles
+### Access entries cho admin roles
 
 ```hcl
 resource "aws_eks_access_entry" "admin" { ... }
@@ -455,11 +455,11 @@ resource "aws_eks_access_policy_association" "admin" { ... }
 - cấp cluster-admin cho các role trong `additional_admin_role_arns`
 - giúp quản trị quyền vào cluster theo role thay vì chỉ dựa vào người tạo cluster
 
-## 8. Giải thích phần IAM trong `iam.tf`
+## Giải thích phần IAM trong `iam.tf`
 
 Stack này tạo 4 nhóm IAM chính:
 
-### 7.1. IAM role cho EKS cluster
+### IAM role cho EKS cluster
 
 - `aws_iam_role.eks_cluster`
 - attach `AmazonEKSClusterPolicy`
@@ -467,7 +467,7 @@ Stack này tạo 4 nhóm IAM chính:
 Ý nghĩa:
 - cho control plane EKS quyền cần thiết để quản lý cluster
 
-### 7.2. IAM role cho EKS worker nodes
+### IAM role cho EKS worker nodes
 
 - `aws_iam_role.eks_node`
 - attach:
@@ -480,7 +480,7 @@ Stack này tạo 4 nhóm IAM chính:
 - pull image từ ECR
 - vận hành network plugin CNI
 
-### 7.3. IAM role cho AWS Load Balancer Controller
+### IAM role cho AWS Load Balancer Controller
 
 - custom policy `aws_iam_policy.load_balancer_controller`
 - role `aws_iam_role.load_balancer_controller`
@@ -489,7 +489,7 @@ Stack này tạo 4 nhóm IAM chính:
 Ý nghĩa:
 - controller trong cluster có quyền tạo ALB, target group, listener, security group rule và các tài nguyên liên quan
 
-### 7.4. IAM role cho application pod
+### IAM role cho application pod
 
 - role `aws_iam_role.application`
 - inline policy `aws_iam_role_policy.application_s3`
@@ -503,9 +503,9 @@ Policy này cho phép:
 Ý nghĩa:
 - pod ứng dụng có thể thao tác đúng trên bucket riêng của app
 
-## 9. Giải thích phần RDS trong `rds.tf`
+## Giải thích phần RDS trong `rds.tf`
 
-### 8.1. DB subnet group
+### DB subnet group
 
 ```hcl
 resource "aws_db_subnet_group" "main" {
@@ -517,7 +517,7 @@ resource "aws_db_subnet_group" "main" {
 - RDS được đặt trong private subnets
 - không public ra Internet
 
-### 8.2. PostgreSQL instance
+### PostgreSQL instance
 
 ```hcl
 resource "aws_db_instance" "postgresql" {
@@ -553,7 +553,7 @@ Muốn an toàn production hơn:
 - bật deletion protection
 - không skip final snapshot
 
-## 10. Giải thích phần security trong `security.tf`
+## Giải thích phần security trong `security.tf`
 
 ### Security group cho RDS
 
@@ -575,7 +575,7 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_eks" {
 - RDS chỉ cho phép truy cập PostgreSQL từ phía EKS
 - không mở public theo CIDR Internet
 
-## 11. Giải thích phần S3 trong `s3.tf`
+## Giải thích phần S3 trong `s3.tf`
 
 Stack này tạo 1 bucket riêng cho ứng dụng.
 
@@ -590,7 +590,7 @@ Các đặc điểm chính:
 - app bucket là private bucket
 - pod trong EKS sẽ truy cập bucket này thông qua IAM role của application pod
 
-## 12. Outputs trong `outputs.tf` dùng để làm gì
+## Outputs trong `outputs.tf` dùng để làm gì
 
 ### Output cho `02-platform`
 
@@ -612,7 +612,7 @@ Các đặc điểm chính:
 - `app_bucket_name`
   - tên bucket app cần truy cập
 
-## 13. Luồng apply thực tế
+## Luồng apply thực tế
 
 ### Bước 1. Chuẩn bị backend
 
@@ -668,7 +668,7 @@ aws eks update-kubeconfig \
 kubectl get nodes -o wide
 ```
 
-## 14. Phụ thuộc với stack khác
+## Phụ thuộc với stack khác
 
 Phụ thuộc vào `00-bootstrap`:
 - cần S3 bucket backend tồn tại trước
@@ -677,7 +677,7 @@ Phụ thuộc vào `00-bootstrap`:
 - `02-platform` đọc remote state của stack này
 - `02-platform` cần `cluster_name`, `vpc_id`, `public_subnet_ids`
 
-## 15. Điểm tốt của stack này
+## Điểm tốt của stack này
 
 - tách rõ hạ tầng nền khỏi platform layer
 - VPC 2 AZ
@@ -690,7 +690,7 @@ Phụ thuộc vào `00-bootstrap`:
 - app bucket private và có deny insecure transport
 - dùng IRSA hoặc Pod Identity thay vì hardcode AWS credentials trong pod
 
-## 16. Production checklist
+## Production checklist
 
 Trước khi dùng stack này cho production, nên kiểm tra các mục sau:
 
@@ -707,7 +707,7 @@ Trước khi dùng stack này cho production, nên kiểm tra các mục sau:
 - cân nhắc tách DB subnet tier riêng nếu security baseline yêu cầu
 - bổ sung CloudTrail, GuardDuty, VPC Flow Logs, CloudWatch alarms và backup strategy nếu đây là môi trường go-live
 
-## 17. Điểm cần lưu ý trước production
+## Điểm cần lưu ý trước production
 
 - `db_deletion_protection` mặc định đang `false`
 - `db_skip_final_snapshot` mặc định đang `true`
@@ -717,7 +717,7 @@ Trước khi dùng stack này cho production, nên kiểm tra các mục sau:
 - chưa thấy WAF, CloudTrail, GuardDuty, VPC Flow Logs, backup strategy đầy đủ
 - chưa có DB subnet tier tách riêng khỏi private app subnets nếu baseline yêu cầu chặt hơn
 
-## 18. Troubleshooting
+## Troubleshooting
 
 ### Lỗi `terraform init` với backend S3
 
@@ -768,7 +768,7 @@ Cách xử lý:
 - kiểm tra ingress rule từ EKS cluster security group sang RDS security group
 - kiểm tra DNS và kết nối TCP 5432 từ pod
 
-## 19. Tóm tắt dễ nhớ
+## Tóm tắt dễ nhớ
 
 `01-infrastructure` là stack dựng nền AWS thực sự.
 

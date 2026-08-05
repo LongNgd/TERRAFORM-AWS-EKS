@@ -278,10 +278,11 @@ values = [
   templatefile(
     "${path.module}/helm-values/aws-load-balancer-controller-values.yaml.tftpl",
     {
-      cluster_name  = data.terraform_remote_state.infrastructure.outputs.cluster_name
-      aws_region    = var.aws_region
-      vpc_id        = data.terraform_remote_state.infrastructure.outputs.vpc_id
-      replica_count = var.load_balancer_controller_replica_count
+      cluster_name                      = data.terraform_remote_state.infrastructure.outputs.cluster_name
+      aws_region                        = var.aws_region
+      vpc_id                            = data.terraform_remote_state.infrastructure.outputs.vpc_id
+      replica_count                     = var.load_balancer_controller_replica_count
+      load_balancer_controller_role_arn = data.terraform_remote_state.infrastructure.outputs.load_balancer_controller_role_arn
     }
   )
 ]
@@ -308,6 +309,8 @@ replicaCount: ${replica_count}
 serviceAccount:
   create: true
   name: aws-load-balancer-controller
+  annotations:
+    eks.amazonaws.com/role-arn: ${load_balancer_controller_role_arn}
 ```
 
 Ý nghĩa từng dòng:
@@ -321,6 +324,8 @@ serviceAccount:
   - số replica của controller
 - `serviceAccount.name`
   - phải trùng với IAM role trust đang cho phép `system:serviceaccount:kube-system:aws-load-balancer-controller`
+- `serviceAccount.annotations.eks.amazonaws.com/role-arn`
+  - chỉ rõ IAM role mà controller sẽ assume qua IRSA
 
 Điểm quan trọng:
 - service account tên `aws-load-balancer-controller` phải khớp với IRSA trust policy trong `01-infrastructure`
