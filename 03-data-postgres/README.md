@@ -372,6 +372,12 @@ Khi đó app local hoặc DBeaver dùng:
 
 DNS nội bộ như `postgresql-ha-pgpool.data.svc.cluster.local` chỉ dùng được với pod chạy bên trong cluster.
 
+Nếu backend Spring Boot chạy trên EKS, nó mới nên dùng:
+
+```text
+postgresql-ha-pgpool.data.svc.cluster.local:5432
+```
+
 ## 11. Troubleshooting
 
 ### Helm release fail với `ServiceMonitor`

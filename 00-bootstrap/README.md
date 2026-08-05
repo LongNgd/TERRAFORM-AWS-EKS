@@ -19,11 +19,11 @@ Nếu state chỉ nằm local trên máy:
 
 Vì vậy repo này dùng:
 - `00-bootstrap` để tạo S3 bucket chứa state
-- sau đó `01-infrastructure` và `02-platform` sẽ dùng bucket đó làm remote backend
+- sau đó `01-infrastructure`, `02-platform` và `03-data-postgres` sẽ dùng bucket đó làm remote backend
 
 Nói ngắn gọn:
 - `00-bootstrap` dựng "kho chứa state"
-- `01` và `02` dùng cái kho đó
+- `01`, `02` và `03` dùng cái kho đó
 
 ## 2. Phạm vi của stack
 
@@ -78,7 +78,7 @@ Luồng logic:
 6. Terraform tạo bucket S3.
 7. Terraform áp các cấu hình bảo vệ bucket.
 8. Terraform output ra tên bucket.
-9. Người dùng lấy tên bucket đó điền vào `backend.hcl` của `01-infrastructure` và `02-platform`.
+9. Người dùng lấy tên bucket đó điền vào `backend.hcl` của `01-infrastructure`, `02-platform` và `03-data-postgres`.
 
 ## 6. Giải thích từng file
 
@@ -191,6 +191,7 @@ output "state_bucket_name" {
 - output này sẽ được copy sang:
   - `01-infrastructure/backend.hcl`
   - `02-platform/backend.hcl`
+  - `03-data-postgres/backend.hcl`
 
 Ví dụ:
 
@@ -522,18 +523,29 @@ encrypt      = true
 use_lockfile = true
 ```
 
+`03-data-postgres/backend.hcl`
+
+```hcl
+bucket       = "REPLACE_WITH_BOOTSTRAP_OUTPUT"
+key          = "longnd/dev/data-postgres.tfstate"
+region       = "ap-southeast-1"
+encrypt      = true
+use_lockfile = true
+```
+
 Ý nghĩa:
-- cả `01` và `02` đều dùng chung bucket
+- cả `01`, `02` và `03` đều dùng chung bucket
 - nhưng mỗi stack có `key` khác nhau
 - tức là mỗi stack có state file riêng
 
 ## 10. Phụ thuộc với stack khác
 
-Stack này không phụ thuộc vào `01-infrastructure` hay `02-platform`.
+Stack này không phụ thuộc vào `01-infrastructure`, `02-platform` hay `03-data-postgres`.
 
 Ngược lại:
 - `01-infrastructure` phụ thuộc vào bucket backend mà stack này tạo ra
 - `02-platform` cũng phụ thuộc vào cùng bucket backend đó
+- `03-data-postgres` cũng phụ thuộc vào cùng bucket backend đó
 
 ## 11. `00-bootstrap` tạo xong thì được gì
 
@@ -549,6 +561,7 @@ Sau khi chạy xong, bạn có:
 Từ lúc đó:
 - `01-infrastructure` có thể dùng remote backend
 - `02-platform` có thể dùng remote backend
+- `03-data-postgres` có thể dùng remote backend
 
 ## 12. Điểm tốt của stack này
 
@@ -651,4 +664,4 @@ Nó làm 3 việc chính:
 3. xuất tên bucket để stack khác dùng làm backend
 
 Nếu không có bước này:
-- `01-infrastructure` và `02-platform` không có remote state chuẩn để chạy
+- `01-infrastructure`, `02-platform` và `03-data-postgres` không có remote state chuẩn để chạy

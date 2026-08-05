@@ -83,6 +83,7 @@ Stack này không cài:
 | `cluster_endpoint` | API endpoint của EKS |
 | `cluster_certificate_authority_data` | CA data của cluster |
 | `load_balancer_controller_role_arn` | IAM role ARN của AWS Load Balancer Controller dùng cho IRSA |
+| `eks_oidc_provider_arn` | IAM OIDC provider ARN dùng cho IRSA trong các stack sau |
 | `vpc_id` | ID của VPC đã tạo |
 | `public_subnet_ids` | Danh sách public subnets |
 | `private_subnet_ids` | Danh sách private subnets |
